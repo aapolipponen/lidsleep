@@ -1,0 +1,25 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check version matches tag
+        run: |
+          v=$(sed -n 's/^VERSION=//p' lidsleep)
+          [ "v$v" = "$GITHUB_REF_NAME" ] || { echo "lidsleep says $v, tag is $GITHUB_REF_NAME"; exit 1; }
+      - run: make check test
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=$(awk -v v="${GITHUB_REF_NAME#v}" '$0 ~ "^## " {p = ($2 == v)} p && !/^## /' CHANGELOG.md)
+          gh release create "$GITHUB_REF_NAME" --title "lidsleep $GITHUB_REF_NAME" --notes "$notes"
