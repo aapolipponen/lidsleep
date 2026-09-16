@@ -1,0 +1,18 @@
+#compdef lidsleep
+
+local -a commands
+commands=(
+    'on:closing the lid suspends'
+    'off:closing the lid does nothing'
+    'toggle:switch between on and off'
+    'status:show the current setting'
+    'reset:turn lid sleep back on and remove the saved setting'
+    'help:show help'
+    'version:show the version'
+)
+
+if (( CURRENT == 2 )); then
+    _describe command commands
+elif (( CURRENT == 3 )) && [[ $words[2] == (on|off|toggle) ]]; then
+    _arguments '(-p --permanent)'{-p,--permanent}'[keep the change after logout and reboot]'
+fi

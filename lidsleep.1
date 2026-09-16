@@ -1,0 +1,73 @@
+.TH LIDSLEEP 1 2026-09-16 "lidsleep 1.0.0" "User Commands"
+.SH NAME
+lidsleep \- control whether closing the laptop lid suspends
+.SH SYNOPSIS
+.B lidsleep
+.RB { on | off | toggle }
+.RB [ \-p | \-\-permanent ]
+.br
+.B lidsleep
+.RB [ status | reset | help | version ]
+.SH DESCRIPTION
+.B lidsleep
+turns lid close suspend on or off on systems using systemd-logind.
+When lid sleep is off, the systemd user service
+.I lidsleep.service
+holds a
+.B handle-lid-switch
+inhibitor lock, so logind ignores the lid switch.
+Nothing needs root.
+.PP
+Whether the service is enabled decides the default applied at each login.
+Changes made without
+.B \-\-permanent
+only last until logout.
+.SH COMMANDS
+.TP
+.B on
+Closing the lid suspends.
+.TP
+.B off
+Closing the lid does nothing.
+.TP
+.B toggle
+Switch between on and off.
+.TP
+.B status
+Show the current setting and whether it is permanent.
+This is the default when no command is given.
+.TP
+.B reset
+Turn lid sleep back on, disable the service and remove the unit file
+lidsleep wrote to the user's config directory, if any.
+.TP
+.B help
+Show usage.
+.TP
+.B version
+Show the version.
+.SH OPTIONS
+.TP
+.BR \-p ", " \-\-permanent
+With
+.BR on ,
+.B off
+or
+.BR toggle ,
+also save the new setting as the default for future logins.
+.SH FILES
+.TP
+.I ~/.config/systemd/user/lidsleep.service
+Written on first use when no packaged copy of the unit is installed.
+.TP
+.I /usr/lib/systemd/user/lidsleep.service
+Unit installed by a package.
+.SH ENVIRONMENT
+.TP
+.B NO_COLOR
+If set, output is not colored.
+.SH EXIT STATUS
+0 on success, 1 on failure, 2 on bad usage.
+.SH SEE ALSO
+.BR systemd-inhibit (1),
+.BR logind.conf (5)
