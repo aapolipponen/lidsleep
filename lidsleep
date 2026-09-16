@@ -1,21 +1,14 @@
 #!/usr/bin/env bash
-# lidsleep — control whether closing the laptop lid suspends.
+# lidsleep - control whether closing the laptop lid suspends.
 # Lid sleep is "off" while a user service holds a logind handle-lid-switch
 # inhibitor. Whether that service is enabled is the saved default applied at
 # each login; on/off without --permanent only change things until logout.
 
 set -euo pipefail
 
+VERSION=1.0.0
 UNIT=lidsleep.service
 UNIT_FILE=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$UNIT
-UNIT_TEXT='[Unit]
-Description=Stop lid close from suspending (lidsleep)
-
-[Service]
-ExecStart=/usr/bin/systemd-inhibit --what=handle-lid-switch --who=lidsleep "--why=Lid close suspend disabled" --mode=block /usr/bin/sleep infinity
-
-[Install]
-WantedBy=default.target'
 
 if [[ -t 1 && -z ${NO_COLOR:-} ]]; then
     B=$'\e[1m' DIM=$'\e[2m' GRN=$'\e[1;32m' YEL=$'\e[1;33m' RST=$'\e[0m'
@@ -23,15 +16,38 @@ else
     B='' DIM='' GRN='' YEL='' RST=''
 fi
 
+die() { echo "lidsleep: $*" >&2; exit 1; }
+
 sc() { systemctl --user --quiet "$@"; }
 now_state()     { if sc is-active "$UNIT"; then echo off; else echo on; fi; }
 default_state() { if sc is-enabled "$UNIT" 2>/dev/null; then echo off; else echo on; fi; }
 
-# Write the unit file if it's missing or out of date.
+unit_text() {
+    local inhibit sleep
+    inhibit=$(command -v systemd-inhibit) || die "systemd-inhibit not found"
+    sleep=$(command -v sleep) || die "sleep not found"
+    cat <<EOF
+[Unit]
+Description=Stop lid close from suspending (lidsleep)
+
+[Service]
+ExecStart=$inhibit --what=handle-lid-switch --who=lidsleep "--why=Lid close suspend disabled" --mode=block $sleep infinity
+
+[Install]
+WantedBy=default.target
+EOF
+}
+
+# Make sure the unit exists. A copy installed by a package is used as is;
+# otherwise one is written to the user's config dir (and kept up to date).
 install_unit() {
-    [[ $(cat "$UNIT_FILE" 2>/dev/null) == "$UNIT_TEXT" ]] && return
+    local path text
+    path=$(systemctl --user show -P FragmentPath "$UNIT" 2>/dev/null) || true
+    [[ -n $path && $path != "$UNIT_FILE" ]] && return
+    text=$(unit_text)
+    [[ $(cat "$UNIT_FILE" 2>/dev/null) == "$text" ]] && return
     mkdir -p "${UNIT_FILE%/*}"
-    printf '%s\n' "$UNIT_TEXT" > "$UNIT_FILE"
+    printf '%s\n' "$text" > "$UNIT_FILE"
     systemctl --user daemon-reload
 }
 
@@ -55,16 +71,29 @@ status() {
     echo "Lid sleep: ${color}${now}${RST} ${DIM}(${note})${RST}"
 }
 
+# Undo everything lidsleep has changed: lid sleep back on, unit removed.
+reset() {
+    sc stop "$UNIT" 2>/dev/null || true
+    sc disable "$UNIT" 2>/dev/null || true
+    if [[ -f $UNIT_FILE ]]; then
+        rm -f "$UNIT_FILE"
+        systemctl --user daemon-reload
+    fi
+    echo "Lid sleep: ${GRN}on${RST} ${DIM}(lidsleep settings removed)${RST}"
+}
+
 usage() {
     cat <<EOF
 ${B}Usage:${RST} lidsleep on|off|toggle [-p]
-       lidsleep status|help
+       lidsleep status|reset|help|version
 
   ${B}on${RST}       closing the lid suspends
   ${B}off${RST}      closing the lid does nothing
   ${B}toggle${RST}   switch between on and off
   ${B}status${RST}   show the current setting ${DIM}(the default with no arguments)${RST}
+  ${B}reset${RST}    turn lid sleep back on and remove the saved setting
   ${B}help${RST}     show this help
+  ${B}version${RST}  show the version
 
   ${B}-p${RST}, ${B}--permanent${RST}   keep the change after logout and reboot
                     ${DIM}(without it, the change lasts until logout)${RST}
@@ -84,9 +113,11 @@ case ${2:-} in
 esac
 
 case $cmd in
-    on|off)         set_state "$cmd" $perm; status ;;
-    toggle)         if [[ $(now_state) == off ]]; then set_state on $perm; else set_state off $perm; fi; status ;;
-    status)         status ;;
-    help|-h|--help) usage ;;
-    *)              bad "unknown command '$cmd'" ;;
+    on|off)               set_state "$cmd" $perm; status ;;
+    toggle)               if [[ $(now_state) == off ]]; then set_state on $perm; else set_state off $perm; fi; status ;;
+    status)               status ;;
+    reset)                reset ;;
+    help|-h|--help)       usage ;;
+    version|-V|--version) echo "lidsleep $VERSION" ;;
+    *)                    bad "unknown command '$cmd'" ;;
 esac
